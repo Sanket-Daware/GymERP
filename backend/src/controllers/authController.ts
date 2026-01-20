@@ -1,7 +1,6 @@
-// src/controllers/authController.ts
 import { Request, Response } from 'express';
-import { AuthRequest } from '../middleware/auth';
-import { User } from '../models/User';
+import User, { IUser } from '../models/User';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 
@@ -81,8 +80,7 @@ export const login = async (req: Request, res: Response) => {
         { email: identifier.toLowerCase() },
         { phone: identifier }
       ]
-    }).populate('gymBranchId', 'branchName branchCode address')
-      .populate('shiftId', 'shiftName startTime endTime');
+    });
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -110,8 +108,6 @@ export const login = async (req: Request, res: Response) => {
         phone: user.phone,
         userType: user.userType,
         assignedRoles: user.assignedRoles,
-        gymBranch: user.gymBranchId,
-        shift: user.shiftId,
         designation: user.designation,
         profilePhoto: user.profilePhoto,
         gender: user.gender
@@ -146,7 +142,9 @@ export const forgotPassword = async (req: Request, res: Response) => {
 
     // Generate reset token
     const resetToken = crypto.randomBytes(32).toString('hex');
-    user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    
+    user.resetPasswordToken = hashedToken;
     user.resetPasswordExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
     await user.save();
 
@@ -199,12 +197,10 @@ export const resetPassword = async (req: Request, res: Response) => {
 };
 
 // Get current user profile
-export const getMe = async (req: AuthRequest, res: Response) => {
+export const getMe = async (req: Request, res: Response) => {
   try {
     const user = await User.findById(req.user?.id)
-      .select('-password -resetPasswordToken -resetPasswordExpires')
-      .populate('gymBranchId', 'branchName branchCode address city')
-      .populate('shiftId', 'shiftName startTime endTime');
+      .select('-password -resetPasswordToken -resetPasswordExpires');
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
